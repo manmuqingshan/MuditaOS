@@ -101,6 +101,7 @@ class ServiceDesktop : public sys::Service
     std::unique_ptr<sdesktop::bluetooth::BluetoothMessagesHandler> btMsgHandler;
     sys::TimerHandle notificationsClearTimer;
     std::vector<Outbox::NotificationEntry> notificationEntries;
+    int notificationCurrentUid = 0;
 
     static constexpr unsigned int DefaultLogFlushTimeoutInMs = 1000U;
     bool initialized                                         = false;

@@ -26,6 +26,6 @@ struct Outbox
         int uid                 = 0;
         EntryType entryType     = EntryType::INVALID;
         EntryChange entryChange = EntryChange::INVALID;
-        int recordId            = 0;
+        uint32_t recordId       = 0;
     };
 };

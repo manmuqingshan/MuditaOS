@@ -14,7 +14,7 @@ namespace sdesktop::endpoints
         auto notificationEntry = json11::Json::object{{json::outbox::uid, entry.uid},
                                                       {json::outbox::type, static_cast<int>(entry.entryType)},
                                                       {json::outbox::change, static_cast<int>(entry.entryChange)},
-                                                      {json::outbox::record_id, entry.recordId}};
+                                                      {json::outbox::record_id, static_cast<int>(entry.recordId)}};
         return notificationEntry;
     }
 

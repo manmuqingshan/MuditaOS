@@ -4,6 +4,7 @@
 #include "service-evtmgr/BatteryMessages.hpp"
 #include "system/SystemReturnCodes.hpp"
 #include <service-appmgr/messages/DOMRequest.hpp>
+#include <service-db/DBNotificationMessage.hpp>
 #include <service-desktop/DesktopMessages.hpp>
 #include <service-desktop/ServiceDesktop.hpp>
 #include <service-desktop/WorkerDesktop.hpp>
@@ -34,11 +35,13 @@
 ServiceDesktop::ServiceDesktop()
     : sys::Service(service::name::service_desktop, "", sdesktop::service_stack),
       btMsgHandler(std::make_unique<sdesktop::bluetooth::BluetoothMessagesHandler>(this)),
-      notificationsClearTimer{
-          sys::TimerFactory::createSingleShotTimer(this,
-                                                   sdesktop::notificationsClearTimerName,
-                                                   sdesktop::notificationsClearTimerDelayMs,
-                                                   [this](sys::Timer & /*timer*/) { notificationEntries.clear(); })}
+      notificationsClearTimer{sys::TimerFactory::createSingleShotTimer(this,
+                                                                       sdesktop::notificationsClearTimerName,
+                                                                       sdesktop::notificationsClearTimerDelayMs,
+                                                                       [this](sys::Timer & /*timer*/) {
+                                                                           notificationEntries.clear();
+                                                                           notificationCurrentUid = 0;
+                                                                       })}
 {
     LOG_INFO("[ServiceDesktop] Initializing");
     bus.channels.push_back(sys::BusChannel::PhoneLockChanges);
@@ -239,6 +242,57 @@ sys::ReturnCodes ServiceDesktop::InitHandler()
     connect(typeid(message::bluetooth::ResponseVisibleDevices), [&](sys::Message *msg) {
         auto msgl = static_cast<message::bluetooth::ResponseVisibleDevices *>(msg);
         return btMsgHandler->handle(msgl);
+    });
+
+    connect(typeid(db::NotificationMessage), [&](sys::Message *msg) {
+        LOG_ERROR("AAAAAAAAAAAAAAAAA notificationMessage candidate received");
+        if (!notificationsClearTimer.isActive()) {
+            LOG_ERROR("AAAAAAAAAAAAAAAAA notificationMessage candidate received");
+            return sys::MessageNone{};
+        }
+        auto notificationMessage = dynamic_cast<db::NotificationMessage *>(msg);
+        if (notificationMessage == nullptr) {
+            return sys::MessageNone{};
+        }
+
+        LOG_ERROR("ServiceDesktop: notificationMessage received");
+        auto entryType = Outbox::EntryType::INVALID;
+        switch (notificationMessage->interface) {
+        case db::Interface::Name::Contact:
+            entryType = Outbox::EntryType::CONTACT;
+            break;
+        case db::Interface::Name::SMS:
+            entryType = Outbox::EntryType::MESSAGE;
+            break;
+        case db::Interface::Name::SMSThread:
+            entryType = Outbox::EntryType::THREAD;
+            break;
+        default:
+            break;
+        }
+
+        auto entryChange = Outbox::EntryChange::INVALID;
+        switch (notificationMessage->type) {
+        case db::Query::Type::Create:
+            entryChange = Outbox::EntryChange::CREATED;
+            break;
+        case db::Query::Type::Update:
+            entryChange = Outbox::EntryChange::UPDATED;
+            break;
+        case db::Query::Type::Delete:
+            entryChange = Outbox::EntryChange::DELETED;
+            break;
+        default:
+            break;
+        }
+
+        if (entryType != Outbox::EntryType::INVALID && entryChange != Outbox::EntryChange::INVALID) {
+            LOG_ERROR("AAAAAAAAAAAAAAAA Writing to notifications vector");
+            Outbox::NotificationEntry newNotificationEntry = {
+                notificationCurrentUid++, entryType, entryChange, notificationMessage->recordId};
+            notificationEntries.emplace_back(newNotificationEntry);
+        }
+        return sys::MessageNone{};
     });
 
     if (auto resUsb = usbWorkerInit(); resUsb != sys::ReturnCodes::Success) {
